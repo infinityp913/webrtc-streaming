@@ -4,6 +4,7 @@
   "description": "demoing webrtc stream between a client and a server",
   "main": "webrtc-server.js",
   "scripts": {
+    "start": "node webrtc-server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
