@@ -1,0 +1,62 @@
+<!-- source: https://web.dev/media-recording-audio/ -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <!-- <script src="script.js" defer></script> -->
+  </head>
+  <body>
+    <audio id="localAudio" controls></audio>
+    <script>
+      const peer = new Peer(
+        `${Math.floor(Math.random() * 2 ** 18)
+          .toString(36)
+          .padStart(4, 0)}`,
+        {
+          host: location.hostname,
+          debug: 3,
+          path: "/webrtc-test",
+        }
+      );
+      window.peer = peer;
+
+      const player = document.getElementById("localAudio");
+
+      const handleSuccess = async function (stream) {
+        if (window.URL) {
+          player.srcObject = await stream;
+        } else {
+          player.src = stream; // await stream?
+          player.src = window.URL.createObjectURL(await stream); // assign URL object to src
+        }
+      };
+      const attachLocalStream = async (stream)=>{
+        window.localStream = stream; // A
+        window.localAudio.srcObject = stream; // B
+        window.localAudio.autoplay = true; // C
+      }
+      const openMediaDevices = async (constraints) => {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      };
+
+      try {
+        const stream = openMediaDevices({ video: false, audio: true });
+        // handleSuccess(stream);
+        // bufferStream(stream);
+        attachLocalStream(stream);
+      } catch (error) {
+        console.error("Error accessing media devices.", error);
+      }
+
+      // navigator.mediaDevices
+      //   .getUserMedia({ audio: true, video: false })
+      //   .then(handleSuccess)
+      //   .catch((error) => {
+      //     console.error("Error accessing media devices.", error);
+      //   });
+    </script>
+  </body>
+</html>

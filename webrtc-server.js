@@ -1,0 +1,62 @@
+// Node JS code to accept the stream
+
+// TODO: npm i peer peerjs
+const { ExpressPeerServer } = require("peer");
+
+const peerServer = ExpressPeerServer(server, {
+  proxied: true,
+  debug: true,
+  path: "/myapp",
+  ssl: {},
+});
+
+app.use("/peerjs", peerServer);
+
+let peerConfiguration = {};
+
+(async () => {
+  const response = await fetch(
+    "https://matherium.metered.live/api/v1/turn/credentials?apiKey=138fc64d454a71ed6ba214fdca0ce0fcf5b0"
+  );
+  const iceServers = await response.json();
+  peerConfiguration.iceServers = iceServers;
+})();
+
+const myPeerConnection = new RTCPeerConnection(peerConfiguration);
+
+// /**
+//  *
+//  * @param {MediaStream} stream
+//  * Buffering incoming WebRTC stream using WebAudio API (AudioContext, AudioBuffer, MediaStreamSource)
+//  */
+// // source: https://stackoverflow.com/questions/48975585/how-to-process-the-audio-from-webrtc
+// SAMPLE_RATE = 16000;
+// BUFF_LENGTH = 45; // create a buffer to store 30s of audio
+// const bufferStream = async function (stream) {
+//   resolved_stream = await stream;
+//   if (resolved_stream.getAudioTracks().length > 0) {
+//     console.log("TEST: audio tracks > 0!");
+//     const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE }); //Specify sample rate, otherwise "the new context's output device's preferred sample rate is used by default."
+//     // typeof(src) = MediaStreamAudioSourceNode (a type of AudioNode which operates as an audio source whose media is received from a MediaStream obtained using the WebRTC API)
+//     // not using AudioBufferSourceNode as in AudioBuffer mdn doc's example, because MediaStreamTrackSource is for WebRTC
+//     const source = audioCtx.createMediaStreamSource(resolved_stream); // not using createMediaStreamTrackSource because it's not supported on most browsers (error said X is not a function)
+//     const audioBuffer = audioCtx.createBuffer(
+//       2,
+//       BUFF_LENGTH * SAMPLE_RATE,
+//       SAMPLE_RATE
+//     ); //createBuffer(numOfChannels, length, sampleRate)
+//     // src.connect(audioBuffer); // connect() didin't work (overload resolution failure)
+//     source.buffer = audioBuffer;
+//     console.log("audiobuffer: ", audioBuffer);
+//     source.connect(audioCtx.destination); // this sends the audio to speakers (the default destination)
+//     const floatBufferArr = audioBuffer.getChannelData(0);
+//     console.log(floatBufferArr);
+//     // trying out downloading the buffer: (in download-wav-buffer.js)
+
+//     // audioBuffer.connect(audioCtx.destination);
+//     // TODO: for buff testing, downlaod f32 arrays to wav files
+//     // TODO: change createMediatStreamSource to constructor
+//   }
+// };
+
+// If we need to execute whisper cpp via bash, how to execute bash commands in js: https://stackoverflow.com/questions/1880198/how-to-execute-shell-command-in-javascript
