@@ -1,28 +1,42 @@
 // Node JS code to accept the stream
 
-// TODO: npm i peer peerjs
 const { ExpressPeerServer } = require("peer");
+const express = require("express");
+const path = require("path");
+
+const app = express();
+const port = process.env.PORT || "8000";
+server = app.listen(port, () => {
+  console.log("server listening at " + port);
+});
 
 const peerServer = ExpressPeerServer(server, {
   proxied: true,
   debug: true,
-  path: "/myapp",
-  ssl: {},
+  path: "/webrtc-test",
+  ssl: {}, // pass in key and cert to ssl dictionary
 });
 
 app.use("/peerjs", peerServer);
+app.use(peerServer);
 
-let peerConfiguration = {};
+app.use(express.static(path.join(__dirname)));
 
-(async () => {
-  const response = await fetch(
-    "https://matherium.metered.live/api/v1/turn/credentials?apiKey=138fc64d454a71ed6ba214fdca0ce0fcf5b0"
-  );
-  const iceServers = await response.json();
-  peerConfiguration.iceServers = iceServers;
-})();
+app.get("/", (request, response) => {
+  response.sendFile(`${__dirname}/webrtc-demo.html`);
+});
 
-const myPeerConnection = new RTCPeerConnection(peerConfiguration);
+// let peerConfiguration = {};
+
+// (async () => {
+//   const response = await fetch(
+//     "https://matherium.metered.live/api/v1/turn/credentials?apiKey=138fc64d454a71ed6ba214fdca0ce0fcf5b0"
+//   );
+//   const iceServers = await response.json();
+//   peerConfiguration.iceServers = iceServers;
+// })();
+
+// const myPeerConnection = new RTCPeerConnection(peerConfiguration);
 
 // /**
 //  *
