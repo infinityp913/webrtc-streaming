@@ -18,7 +18,6 @@ const peerServer = ExpressPeerServer(server, {
 });
 
 app.use("/peerjs", peerServer);
-app.use(peerServer);
 
 app.use(express.static(path.join(__dirname)));
 
