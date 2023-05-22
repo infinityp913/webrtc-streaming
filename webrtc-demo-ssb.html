@@ -1,0 +1,343 @@
+<!-- source: https://web.dev/media-recording-audio/ -->
+<!-- SSB = server side buffering -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
+    <!--TODO: host this yourself!https://peerjs.com/docs/-->
+    <!-- <script src="script.js" defer></script> -->
+  </head>
+  <body>
+    <audio id="localAudio" controls></audio>
+    <label>localAudio</label>
+    <button id="hangup-btn" hidden>Hang Up</button>
+    <button id="call-btn">Call</button>
+    <audio id="remoteAudio" controls></audio>
+    <label>remoteAudio</label>
+    <label id="my_peer_id_label"></label>
+
+    <script>
+      let peerConfiguration = {};
+
+      (async () => {
+        const response = await fetch(
+          "https://matherium.metered.live/api/v1/turn/credentials?apiKey=138fc64d454a71ed6ba214fdca0ce0fcf5b0"
+        );
+        const iceServers = await response.json();
+        peerConfiguration.iceServers = iceServers;
+      })();
+      my_peer_id = Math.floor(Math.random() * 2 ** 18)
+        .toString(36)
+        .padStart(4, 0);
+      const peer = new Peer(`${my_peer_id}`, {
+        host: location.hostname,
+        // host: matherium.com,
+        debug: 3,
+        path: "/peer-server", // The path where your self-hosted PeerServer is running.
+        config: peerConfiguration,
+        // secure: true, //use SSL
+        port: 36709,
+      });
+      window.peer = peer;
+
+      const player = document.getElementById("localAudio");
+
+      // const handleSuccess = async function (stream) {
+      //   if (window.URL) {
+      //     player.srcObject = await stream;
+      //   } else {
+      //     player.src = stream; // await stream?
+      //     player.src = window.URL.createObjectURL(await stream); // assign URL object to src
+      //   }
+      // };
+      const attachLocalStream = async (stream) => {
+        window.localStream = await stream;
+        // DON'T PLAY LOCAL STREAM NOW
+        // window.localAudio.srcObject = await stream;
+        // window.localAudio.autoplay = true;
+      };
+      const openMediaDevices = async (constraints) => {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      };
+
+      try {
+        const stream = openMediaDevices({ video: false, audio: true });
+        // handleSuccess(stream);
+        // bufferStream(stream);
+        attachLocalStream(stream);
+      } catch (error) {
+        console.error("Error accessing media devices.", error);
+      }
+
+      console.log("my peer id is:", my_peer_id);
+      const callBtn = document.querySelector("#call-btn");
+      const hangupBtn = document.querySelector("#hangup-btn");
+      // Displays the call button and peer ID
+      function showCallContent() {
+        window.my_peer_id_label.textContent = `Your device ID is: ${peer.id}`;
+        callBtn.hidden = false;
+        hangupBtn.hidden = true;
+      }
+
+      // Displays the hangup button and correct copy
+      function showConnectedContent() {
+        window.my_peer_id_label.textContent = "You're connected";
+        callBtn.hidden = true;
+        hangupBtn.hidden = false;
+      }
+
+      let peer_id;
+      function getStreamCode() {
+        peer_id = window.prompt(
+          "Please enter the id for the peer you want to connect with"
+        );
+      }
+
+      let conn;
+
+      const recordedChunks = [];
+
+      callBtn.addEventListener("click", () => {
+        // call endpoint /gen_peer which generates a peer
+        (async () => {
+          const response = await fetch("/gen-peer");
+          const peer_id_json = await response.json();
+          const peer_id = peer_id_json.peer_id;
+        })();
+
+        // Calling logic
+        conn = peer.connect(peer_id); // STEP 1: CONNECT (signalling) //TODO: Be sure to listen on error event: peer.on('error', (error)=>{})
+        console.log('window.localStream:',window.localStream);
+        const call = peer.call(peer_id, window.localStream); // STEP 2: CALL with our local stream (we set window.locastream to our mediatsream)
+        console.log("stag log: hello");
+        call.on("stream", (remote_stream) => {
+          // STEP 3: RECEIVE remote stream
+          console.log("stag log: were in stream mode");
+          // APR 21 REMOVED BINDING TO AUDIO HTML TAG
+          // window.remoteAudio.srcObject = remote_stream;
+          // window.remoteAudio.autoplay = true;
+          window.peerStream = remote_stream; // this just sets a variable to access the remotestream later
+          // // TODO: pipe remote_stream to file IN THE CALLING LOGIC
+          // const mediaRecorder = new MediaRecorder(remote_stream, {
+          //   audioBitsPerSecond: 16000, // whisper neeeds 16K samplerate
+          // });
+          // mediaRecorder.ondataavailable = handleDataAvailable;
+          // mediaRecorder.start();
+          // showConnectedContent();
+          // setTimeout((event) => {
+          //   console.log("stopping");
+          //   mediaRecorder.stop();
+          // }, 15000);
+          console.log("right above bufferstream call");
+          bufferStream(remote_stream);
+        });
+        conn.on("close", () => {
+          // This is to execute code when the remote peer ends the call
+          //Emitted when either you or the remote peer closes the data connection.
+          showCallContent();
+        });
+      });
+
+      // helper to capture the remote_stream and call download() helper func
+      function handleDataAvailable(event) {
+        console.log("data-available");
+        if (event.data.size > 0) {
+          console.log("Event.data is more than zero!");
+          recordedChunks.push(event.data);
+          console.log(recordedChunks);
+          download();
+        } else {
+          console.log("Event.datasize <= 0");
+        }
+      }
+
+      // helper fucntion to download stream
+      function download() {
+        const blob = new Blob(recordedChunks);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        document.body.appendChild(a);
+        a.style = "display: none";
+        a.href = url;
+        a.download = "test.wav";
+        a.click();
+        window.URL.revokeObjectURL(url);
+      }
+
+      // Hanging up logic
+
+      hangupBtn.addEventListener("click", () => {
+        console.log("stag log: hanging up");
+        conn.close();
+        peer.destroy();
+        showCallContent();
+      });
+
+      // When the peer has connected to the server, diplay the peer ID
+
+      peer.on("open", () => {
+        window.my_peer_id_label.textContent = `Your code is: ${peer.id}`; // TODO: REMOVE THIS, STORE ID WHEN GENERATED
+      });
+
+      // When a data connection between peers is open, get the connecting peer's details
+
+      peer.on("connection", (connection) => {
+        conn = connection;
+      });
+
+      // Answering logic: When a call has been created, answer it and set the remote stream for the person being called
+
+      peer.on("call", (call) => {
+        // call event emitted when a remote peer attempts to call you
+        const answerCall = confirm("Do you want to answer?");
+        if (answerCall) {
+          call.answer(window.localStream); //STEP 1: answer with your own local stream
+          showConnectedContent();
+          // Emitted when a remote peer adds a stream.
+          // STEP 2: RECEIVE remote stream
+          call.on("stream", (remote_stream) => {
+            console.log("we're in stream receiving mode!");
+
+            window.remoteAudio.srcObject = remote_stream;
+            window.remoteAudio.autoplay = true;
+            window.peerStream = remote_stream;
+
+            // // TODO: pipe remote_stream to file IN THE ANSWERING LOGIC
+            // const mediaRecorder = new MediaRecorder(remote_stream, {
+            //   audioBitsPerSecond: 16000, // whisper neeeds 16K samplerate
+            // });
+            // mediaRecorder.ondataavailable = handleDataAvailable;
+            // mediaRecorder.start();
+            // showConnectedContent();
+            // setTimeout((event) => {
+            //   console.log("stopping");
+            //   mediaRecorder.stop();
+            // }, 15000);
+          });
+          conn.on("close", () => {
+            console.log("stag log: hanging up");
+            // This is to execute code when the remote peer ends the call
+            //Emitted when either you or the remote peer closes the data connection.
+            peer.destroy();
+            showCallContent();
+          });
+        } else {
+          console.log("call denied");
+        }
+      });
+
+      /**
+       * Log errors to the console when they occur
+       */
+      peer.on("error", (err) => console.error(err));
+
+      // navigator.mediaDevices
+      //   .getUserMedia({ audio: true, video: false })
+      //   .then(handleSuccess)
+      //   .catch((error) => {
+      //     console.error("Error accessing media devices.", error);
+      //   });
+      /**
+       *
+       * @param {MediaStream} stream
+       * Buffering incoming WebRTC stream using WebAudio API (AudioContext, AudioBuffer, MediaStreamSource)
+       */
+      // source: https://stackoverflow.com/questions/48975585/how-to-process-the-audio-from-webrtc
+      SAMPLE_RATE = 16000;
+      BUFF_LENGTH = 30; // create a buffer to store 30s of audio
+
+      // function to start buffering the remote stream
+
+      const startBuffer = function (audioCtx, audioBuffer, source) {
+        // source.connect(audioBuffer); // connect() didin't work (overload resolution failure)
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination); // this sends the audio to speakers (the default destination)
+        // const floatBufferArr = audioBuffer.getChannelData(0);
+        // return floatBufferArr;
+
+        // TODO: send audio stream to buffer and switch when it fills
+        // when you swithc, change the global buffer index
+      };
+
+      const bufferStream = async function (stream) {
+        resolved_stream = await stream;
+        console.log("second line inside bufferstream");
+        if (resolved_stream.getAudioTracks().length > 0) {
+          console.log("TEST: audio tracks > 0!");
+          // If voice is detected start buffering
+
+          const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE }); //Specify sample rate, otherwise "the new context's output device's preferred sample rate is used by default."
+
+          const buffer1 = audioCtx.createBuffer(
+            2,
+            BUFF_LENGTH * SAMPLE_RATE,
+            SAMPLE_RATE
+          ); //createBuffer(numOfChannels, length, sampleRate)
+
+          const buffer2 = audioCtx.createBuffer(
+            2,
+            BUFF_LENGTH * SAMPLE_RATE,
+            SAMPLE_RATE
+          ); //createBuffer(numOfChannels, length, sampleRate)
+
+          let curr_buffer_idx = 1;
+          let curr_buffer = null;
+          // typeof(src) = MediaStreamAudioSourceNode (a type of AudioNode which operates as an audio source whose media is received from a MediaStream obtained using the WebRTC API)
+          // not using AudioBufferSourceNode as in AudioBuffer mdn doc's example, because MediaStreamSource is for WebRTC
+          const mediaStreamSource = audioCtx.createMediaStreamSource(stream); // not using createMediaStreamTrackSource because it's not supported on most browsers (error said X is not a function)
+
+          let floatBufferArr = [];
+          const VAD = require("vad").VAD;
+          const vad = new VAD(VAD.MODE_NORMAL);
+          console.log("checking for voice!");
+          // check for voice (speech) in the stream
+          vad.on("voice", function () {
+            console.log("Voice detected!");
+            curr_buffer = curr_buffer_idx == 1 ? buffer1 : buffer2; // determine which buffer to use based on the index
+            startBuffer(audioCtx, curr_buffer, mediaStreamSource);
+          });
+
+          //TODO: poll for buffer filling, is there an event to listen for?
+          // there's an onend event with callback. thats for when the buffer stops playing
+
+          console.log("checking for silence!");
+          // check for a silence break in speech, if so stop buffering
+          vad.on("silence", function () {
+            console.log("Silence detected!");
+            // Check if a 3s silence period is hit, if so stop buffering and pass on to processing function
+
+            setTimeout(() => {
+              console.log("Silence detected after 3s!");
+              curr_buffer_idx = curr_buffer_idx == 1 ? 2 : 1; //
+              floatBufferArr = curr_buffer.getChannelData(0);
+            }, 3000);
+
+            // commented the following out since we'd have to keep calling it in loop until 3s were hit
+            // var start = process.hrtime();
+            // var elapsed = process.hrtime(start)[1] / 1000000; // divide by a million to get nano to milli
+          });
+
+          // if needed, try out downloading the buffer: (in download-wav-buffer.js)
+
+          // audioBuffer.connect(audioCtx.destination);
+          // TODO: change createMediatStreamSource to constructor
+        }
+      };
+
+      // If we need to execute whisper cpp via bash, how to execute bash commands in js: https://stackoverflow.com/questions/1880198/how-to-execute-shell-command-in-javascript
+
+      // Processing function: takes audio stream input, passes to whisper,
+      // then the text output of whisper is passed to dialogflow (this contains the FAQNet
+      //  and the TTS Net).
+      // output is response in audio form (TODO: determine what format)
+
+      function process_stream() {
+        return;
+      }
+    </script>
+  </body>
+</html>
